@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+
+<html>
+
+  <head>
+    <title>Where in the world is Comp20?</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?sensor=true"></script>
+    <link rel="stylesheet" href="style.css" />
+    
+    <script>
+      var myLat = 0;
+      var myLng = 0;
+      var myLogin = "JoshWright";
+
+      var myOptions = {
+            zoom: 15,
+            mapTypeId: google.maps.MapTypeId.ROADMAP
+          };
+
+      var map;
+      var marker;
+      var infowindow = new google.maps.InfoWindow();
+      
+      function init()
+      {
+        map = new google.maps.Map(document.getElementById("map_canvas"), myOptions);
+        getMyLocation();
+      }
+      
+      // get my current location
+      function getMyLocation() {
+        if (navigator.geolocation) { // the navigator.geolocation object is supported on your browser
+          navigator.geolocation.getCurrentPosition(function(position) {
+            myLat = position.coords.latitude;
+            myLng = position.coords.longitude;
+            sendRequest();
+          });
+        }
+        else {
+          alert("Geolocation is not supported by your web browser.  What a shame!");
+        }
+      }
+
+      // post location to server and retrieve others locations
+      function sendRequest()
+      {
+          var request = new XMLHttpRequest();
+          var url = "https://arcane-crag-8747.herokuapp.com/sendLocation";
+          var params = "login=" + myLogin + "&lat="+ myLat + "&lng=" + myLng + "&message=" + encodeURIComponent("I can see Russia from my house");
+          request.open("POST", url, true);
+
+          request.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+          request.send(params);
+
+          request.onreadystatechange = function() {
+            if(request.readyState == 4 && request.status == 200) {
+              parseResponse(request.responseText);
+            }
+          }
+      }
+
+      // parse data retrieved from server
+      function parseResponse(JSONObject)
+      {
+        var response = JSON.parse(JSONObject);
+        for(var key in response) {
+            var person = response[key];
+            var lat = person["lat"];
+            var lng = person["lng"];
+            var name = person["login"];
+            var message = person["message"];
+            var loc = new google.maps.LatLng(person["lat"], person["lng"]);
+
+            calculateDistance(person);
+        }
+
+        // haversine formula for distance between two points over the Earth's surface
+        function calculateDistance(person){
+            Number.prototype.toRad = function() {
+                 return this * Math.PI / 180;
+            }
+
+            var lat2 = person["lat"]; 
+            var lon2 = person["lng"]; 
+            var R = 6371; // radius of Earth 
+            var x1 = lat2-myLat;
+            var dLat = x1.toRad();  
+            var x2 = lon2-myLng;
+            var dLon = x2.toRad();  
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
+                        Math.cos(myLat.toRad()) * Math.cos(myLng.toRad()) * 
+                        Math.sin(dLon/2) * Math.sin(dLon/2);  
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+            var d = R * c;
+
+            addMarker(map, person, d);
+        }
+      }
+
+      // add marker on map for every person
+      function addMarker(map, person, distance) {
+
+          // my info window
+          if(person["login"] == myLogin){
+            var icon = "target.png";
+            marker = new google.maps.Marker({
+              position: new google.maps.LatLng(person["lat"], person["lng"]), 
+              title: "<div class='login'>" + person["login"] + "</div>" + "<div class='message'>" + person["message"] + "</div>", // don't include distance from myself
+              icon: icon, // my special icon
+            });
+          }
+
+          // everyone else's info window
+          else{
+            marker = new google.maps.Marker({
+              position: new google.maps.LatLng(person["lat"], person["lng"]), 
+              title: "<div class='login'>" + person["login"] + "</div>" + "<div class='message'> " + person["message"] + "</div>" + "<div class='distance'>" + distance + "km from me" + "</div>",
+            });
+          }
+
+            marker.setMap(map);
+
+            showInfo(map, marker);
+      }
+
+
+      // show person's info when marker clicked
+      function showInfo(map, marker){
+          google.maps.event.addListener(marker, 'click', function() {
+            infowindow.setContent(marker.title);
+            infowindow.open(map, marker);
+          });
+
+          panTo();
+      }
+
+      // pan to my location
+      function panTo()
+      {
+        me = new google.maps.LatLng(myLat, myLng);
+        map.panTo(me);
+      }
+
+    </script>
+  </head>
+  
+  <body onload="init()">
+    <div id="map_canvas"></div>
+  </body>
+</html>
